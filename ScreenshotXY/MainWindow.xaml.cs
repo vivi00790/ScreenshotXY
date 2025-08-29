@@ -1,12 +1,15 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.IO;
 using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Interop;
 using System.Windows.Media;
+using System.Windows.Media.Imaging;
+using Microsoft.Win32;
 using ScreenshotXY.Interop;
 using SD = System.Drawing; // alias to avoid Point/Rectangle conflicts
 using SDI = System.Drawing.Imaging;
@@ -20,7 +23,9 @@ public partial class MainWindow
     private Point _end;
     private double _imgW, _imgH;
     private static readonly List<string> HardcodedProcessList = [];
-    private const int HOTKEY_ID_F12 = 0xA001;
+    private const int HotkeyIdF12 = 0xA001;
+    private bool _hasSelection;
+    private int _selX1, _selY1, _selX2, _selY2;
 
     private static readonly HashSet<string> SystemLikeNames = new(StringComparer.OrdinalIgnoreCase)
         { "System", "Idle" };
@@ -32,41 +37,43 @@ public partial class MainWindow
         SelectionRect.Fill = new SolidColorBrush(Color.FromArgb(60, 0, 255, 0));
         UpdateProcessList();
     }
-    
+
     protected override void OnSourceInitialized(EventArgs e)
     {
         base.OnSourceInitialized(e);
 
         var source = (HwndSource)PresentationSource.FromVisual(this);
-        source.AddHook(WndProc);
+        source!.AddHook(WndProc);
 
         var hwnd = new WindowInteropHelper(this).Handle;
         var vkF12 = (uint)KeyInterop.VirtualKeyFromKey(Key.F12);
 
-        var ok = NativeMethods.RegisterHotKey(hwnd, HOTKEY_ID_F12, NativeMethods.MOD_CONTROL, vkF12);
-        if (!ok) MessageBox.Show("F12 is occupied by other app!", "Warning",
-            MessageBoxButton.OK, MessageBoxImage.Warning);
+        var ok = NativeMethods.RegisterHotKey(hwnd, HotkeyIdF12, NativeMethods.ModControl, vkF12);
+        if (!ok)
+            MessageBox.Show("F12 is occupied by other app!", "Warning",
+                MessageBoxButton.OK, MessageBoxImage.Warning);
     }
-    
+
     private IntPtr WndProc(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
     {
-        if (msg != NativeMethods.WM_HOTKEY || wParam.ToInt32() != HOTKEY_ID_F12) return IntPtr.Zero;
+        if (msg != NativeMethods.WmHotkey || wParam.ToInt32() != HotkeyIdF12) return IntPtr.Zero;
         BtnCapture_Click(this, new RoutedEventArgs());
         handled = true;
         return IntPtr.Zero;
     }
-    
+
     protected override void OnClosed(EventArgs e)
     {
         try
         {
             var hwnd = new WindowInteropHelper(this).Handle;
-            NativeMethods.UnregisterHotKey(hwnd, HOTKEY_ID_F12);
+            NativeMethods.UnregisterHotKey(hwnd, HotkeyIdF12);
         }
         catch
         {
             // ignored
         }
+
         base.OnClosed(e);
     }
 
@@ -105,7 +112,7 @@ public partial class MainWindow
             }
             catch
             {
-                // some processes may throw when pick, can ignore
+                // some processes may throw when picked, can ignore
             }
             finally
             {
@@ -125,16 +132,66 @@ public partial class MainWindow
         return list;
     }
 
+    private void BtnSaveCrop_Click(object sender, RoutedEventArgs e)
+    {
+        if (CapturedImage.Source == null)
+        {
+            MessageBox.Show("no crop", "Warning", MessageBoxButton.OK, MessageBoxImage.Information);
+            return;
+        }
+
+        if (!_hasSelection)
+        {
+            MessageBox.Show("you haven't selected an area", "Warning", MessageBoxButton.OK,
+                MessageBoxImage.Information);
+            return;
+        }
+
+        var src = (BitmapSource)CapturedImage.Source;
+
+        // 夾到合法範圍
+        var x = Math.Max(0, Math.Min(_selX1, src.PixelWidth - 1));
+        var y = Math.Max(0, Math.Min(_selY1, src.PixelHeight - 1));
+        var w = Math.Max(1, Math.Min(_selX2 - _selX1, src.PixelWidth - x));
+        var h = Math.Max(1, Math.Min(_selY2 - _selY1, src.PixelHeight - y));
+
+        var rect = new Int32Rect(x, y, w, h);
+        var crop = new CroppedBitmap(src, rect);
+
+        var dlg = new SaveFileDialog
+        {
+            Title = "Save Crop",
+            Filter = "BMP Image|*.bmp|PNG Image|*.png|JPEG Image|*.jpg;*.jpeg",
+            DefaultExt = "bmp",
+            FileName = $"crop_{x}_{y}_{w}x{h}"
+        };
+
+        if (dlg.ShowDialog(this) != true) return;
+
+        BitmapEncoder encoder = Path.GetExtension(dlg.FileName).ToLowerInvariant() switch
+        {
+            ".jpg" or ".jpeg" => new JpegBitmapEncoder { QualityLevel = 95 },
+            ".bmp" => new BmpBitmapEncoder(),
+            _ => new PngBitmapEncoder()
+        };
+
+        encoder.Frames.Add(BitmapFrame.Create(crop));
+        using var fs = File.Create(dlg.FileName);
+        encoder.Save(fs);
+    }
+
     private void BtnCapture_Click(object sender, RoutedEventArgs e)
     {
+        _hasSelection = false;
+        SelectionRect.Visibility = Visibility.Collapsed;
         var chosen = (ProcessCombo.Text ?? ((ComboBoxItem)ProcessCombo.SelectedItem)?.Content?.ToString())?.Trim();
         if (string.IsNullOrEmpty(chosen)) chosen = "game.exe";
         var procName = chosen.EndsWith(".exe", StringComparison.OrdinalIgnoreCase)
             ? chosen[..^4]
             : chosen;
 
-        var procs = Process.GetProcessesByName(procName);
-        if (procs.Length == 0)
+        var processes = Process.GetProcessesByName(procName);
+        if (processes.Length == 0)
         {
             MessageBox.Show($"Cannot find process：{chosen}\nMake sure {chosen} is running.", "Alert",
                 MessageBoxButton.OK, MessageBoxImage.Information);
@@ -142,14 +199,14 @@ public partial class MainWindow
         }
 
         var hwnd = IntPtr.Zero;
-        foreach (var p in procs)
+        foreach (var p in processes)
         {
             if (p.MainWindowHandle == IntPtr.Zero) continue;
             hwnd = p.MainWindowHandle;
             break;
         }
 
-        if (hwnd == IntPtr.Zero) hwnd = procs[0].MainWindowHandle;
+        if (hwnd == IntPtr.Zero) hwnd = processes[0].MainWindowHandle;
         if (hwnd == IntPtr.Zero)
         {
             MessageBox.Show("Selected process has no window.", "Alert",
@@ -239,6 +296,8 @@ public partial class MainWindow
         if (CapturedImage.Source == null) return;
         if (e.LeftButton != MouseButtonState.Pressed) return;
 
+        _hasSelection = false;
+        SelectionRect.Visibility = Visibility.Collapsed;
         _dragging = true;
         _start = ClampToImage(e.GetPosition(CapturedImage));
         _end = _start;
@@ -260,7 +319,6 @@ public partial class MainWindow
 
         _dragging = false;
         _end = ClampToImage(e.GetPosition(CapturedImage));
-        UpdateSelectionVisual();
 
         // normalize
         var x1 = Math.Min(_start.X, _end.X);
@@ -276,6 +334,13 @@ public partial class MainWindow
 
         var w = Math.Max(0, ix2 - ix1);
         var h = Math.Max(0, iy2 - iy1);
+
+        _selX1 = ix1;
+        _selY1 = iy1;
+        _selX2 = ix2;
+        _selY2 = iy2;
+        _hasSelection = (w > 0 && h > 0);
+        UpdateSelectionVisual();
 
         InfoBox.Text =
             $"(X{ix1},Y{iy1})\r\n" +
@@ -295,17 +360,30 @@ public partial class MainWindow
 
     private void UpdateSelectionVisual()
     {
-        SelectionRect.Visibility = _dragging ? Visibility.Visible : Visibility.Collapsed;
-        if (!_dragging) return;
+        if (_dragging)
+        {
+            var x1 = Math.Min(_start.X, _end.X);
+            var y1 = Math.Min(_start.Y, _end.Y);
+            var x2 = Math.Max(_start.X, _end.X);
+            var y2 = Math.Max(_start.Y, _end.Y);
 
-        var x1 = Math.Min(_start.X, _end.X);
-        var y1 = Math.Min(_start.Y, _end.Y);
-        var x2 = Math.Max(_start.X, _end.X);
-        var y2 = Math.Max(_start.Y, _end.Y);
-
-        Canvas.SetLeft(SelectionRect, x1);
-        Canvas.SetTop(SelectionRect, y1);
-        SelectionRect.Width = Math.Max(0, x2 - x1);
-        SelectionRect.Height = Math.Max(0, y2 - y1);
+            Canvas.SetLeft(SelectionRect, x1);
+            Canvas.SetTop(SelectionRect, y1);
+            SelectionRect.Width = Math.Max(0, x2 - x1);
+            SelectionRect.Height = Math.Max(0, y2 - y1);
+            SelectionRect.Visibility = Visibility.Visible;
+        }
+        else if (_hasSelection)
+        {
+            Canvas.SetLeft(SelectionRect, _selX1);
+            Canvas.SetTop(SelectionRect, _selY1);
+            SelectionRect.Width = Math.Max(0, _selX2 - _selX1);
+            SelectionRect.Height = Math.Max(0, _selY2 - _selY1);
+            SelectionRect.Visibility = Visibility.Visible;
+        }
+        else
+        {
+            SelectionRect.Visibility = Visibility.Collapsed;
+        }
     }
 }

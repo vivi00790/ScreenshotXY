@@ -8,6 +8,7 @@
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
+            <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
 
         <!-- Top bar -->
@@ -60,5 +61,13 @@
                          TextWrapping="NoWrap" />
             </Grid>
         </Grid>
+        <Button x:Name="BtnSaveCrop"
+                Grid.Row="2"
+                Content="Save crop…"
+                Width="160"
+                HorizontalAlignment="Right"
+                VerticalAlignment="Center"
+                Margin="0,0,8,8"
+                Click="BtnSaveCrop_Click"/>
     </Grid>
 </Window>
