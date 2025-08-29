@@ -21,7 +21,7 @@
                     Width="110"
                     Margin="0,0,8,0"
                     Click="BtnRefresh_Click" />
-            <Button x:Name="BtnCapture" Content="Capture Screenshot" Width="130" Click="BtnCapture_Click" />
+            <Button x:Name="BtnCapture" Content="Capture Screenshot (Ctrl + F12)" Width="130" Click="BtnCapture_Click" />
             <TextBlock x:Name="LblSize"
                        Margin="12,0,0,0"
                        VerticalAlignment="Center"

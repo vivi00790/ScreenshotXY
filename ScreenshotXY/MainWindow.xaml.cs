@@ -5,6 +5,7 @@ using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
+using System.Windows.Interop;
 using System.Windows.Media;
 using ScreenshotXY.Interop;
 using SD = System.Drawing; // alias to avoid Point/Rectangle conflicts
@@ -19,6 +20,7 @@ public partial class MainWindow
     private Point _end;
     private double _imgW, _imgH;
     private static readonly List<string> HardcodedProcessList = [];
+    private const int HOTKEY_ID_F12 = 0xA001;
 
     private static readonly HashSet<string> SystemLikeNames = new(StringComparer.OrdinalIgnoreCase)
         { "System", "Idle" };
@@ -29,6 +31,43 @@ public partial class MainWindow
         SelectionRect.Stroke = new SolidColorBrush(Colors.Lime);
         SelectionRect.Fill = new SolidColorBrush(Color.FromArgb(60, 0, 255, 0));
         UpdateProcessList();
+    }
+    
+    protected override void OnSourceInitialized(EventArgs e)
+    {
+        base.OnSourceInitialized(e);
+
+        var source = (HwndSource)PresentationSource.FromVisual(this);
+        source.AddHook(WndProc);
+
+        var hwnd = new WindowInteropHelper(this).Handle;
+        var vkF12 = (uint)KeyInterop.VirtualKeyFromKey(Key.F12);
+
+        var ok = NativeMethods.RegisterHotKey(hwnd, HOTKEY_ID_F12, NativeMethods.MOD_CONTROL, vkF12);
+        if (!ok) MessageBox.Show("F12 is occupied by other app!", "Warning",
+            MessageBoxButton.OK, MessageBoxImage.Warning);
+    }
+    
+    private IntPtr WndProc(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
+    {
+        if (msg != NativeMethods.WM_HOTKEY || wParam.ToInt32() != HOTKEY_ID_F12) return IntPtr.Zero;
+        BtnCapture_Click(this, new RoutedEventArgs());
+        handled = true;
+        return IntPtr.Zero;
+    }
+    
+    protected override void OnClosed(EventArgs e)
+    {
+        try
+        {
+            var hwnd = new WindowInteropHelper(this).Handle;
+            NativeMethods.UnregisterHotKey(hwnd, HOTKEY_ID_F12);
+        }
+        catch
+        {
+            // ignored
+        }
+        base.OnClosed(e);
     }
 
     private void BtnRefresh_Click(object sender, RoutedEventArgs e)
