@@ -1,10 +1,28 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
-<PropertyGroup>
-    <TargetFramework>net8.0-windows</TargetFramework>
-    <UseWPF>true</UseWPF>
-    <OutputType>WinExe</OutputType>
-</PropertyGroup>
-<ItemGroup>
-    <PackageReference Include="System.Drawing.Common" Version="8.*" />
-</ItemGroup>
+    <PropertyGroup>
+        <TargetFramework>net8.0-windows</TargetFramework>
+        <UseWPF>true</UseWPF>
+        <OutputType>WinExe</OutputType>
+
+        <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+        <SelfContained>false</SelfContained>
+        <PublishSingleFile>true</PublishSingleFile>
+
+        <PublishReadyToRun>false</PublishReadyToRun>
+        <PublishTrimmed>false</PublishTrimmed>
+        <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
+
+        <DebugType>none</DebugType>
+        <DebugSymbols>false</DebugSymbols>
+        <CopyOutputSymbolsToPublishDirectory>false</CopyOutputSymbolsToPublishDirectory>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <None Update="**\*.pdb"><CopyToPublishDirectory>Never</CopyToPublishDirectory></None>
+        <None Update="**\*.xml"><CopyToPublishDirectory>Never</CopyToPublishDirectory></None>
+    </ItemGroup>
+    
+    <ItemGroup>
+        <PackageReference Include="System.Drawing.Common" Version="8.*" />
+    </ItemGroup>
 </Project>

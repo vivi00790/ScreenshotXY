@@ -1,7 +1,7 @@
 ﻿<Window x:Class="ScreenshotXY.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="Process Window Capture (WPF)" Height="600" Width="980"
+        Title="ScreenshotXY" Height="600" Width="980"
         WindowStartupLocation="CenterScreen" SnapsToDevicePixels="True"
         UseLayoutRounding="True">
     <Grid>
