@@ -11,6 +11,7 @@ using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using Microsoft.Win32;
 using ScreenshotXY.Interop;
+using Point = System.Windows.Point;
 using SD = System.Drawing; // alias to avoid Point/Rectangle conflicts
 using SDI = System.Drawing.Imaging;
 
@@ -216,7 +217,8 @@ public partial class MainWindow
 
         try
         {
-            using var bmp = CaptureWindowBitmap(hwnd);
+            var img = ReadScreenImage(hwnd);
+            using var bmp = img as SD.Bitmap ?? new SD.Bitmap(img);
             if (bmp == null)
             {
                 MessageBox.Show("Capture failed.", "Error",
@@ -289,6 +291,25 @@ public partial class MainWindow
         }
 
         return bmp;
+    }
+    
+    private static SD.Image ReadScreenImage(IntPtr hwnd)
+    {
+        var rect = new NativeMethods.RECT();
+        NativeMethods.GetClientRect(hwnd, ref rect);
+        var point = new SD.Point();
+        NativeMethods.ClientToScreen(hwnd, ref point);
+        var r =  new SD.Rectangle(point.X, point.Y, rect.right - rect.left, rect.bottom - rect.top);
+        SD.Bitmap memoryImage = new(r.Width, r.Height);
+        SD.Size s = new(memoryImage.Width, memoryImage.Height);
+        var memoryGraphics = SD.Graphics.FromImage(memoryImage);
+        memoryGraphics.CopyFromScreen(r.X, r.Y, 0, 0, s);
+        MemoryStream ms = new();
+        memoryImage.Save(ms, SDI.ImageFormat.Png);
+        var image = SD.Image.FromStream(ms);
+        ms.Position = 0;
+
+        return image;
     }
 
     private void Image_MouseDown(object sender, MouseButtonEventArgs e)

@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Drawing;
 using System.Runtime.InteropServices;
 
 namespace ScreenshotXY.Interop;
@@ -19,10 +20,25 @@ internal static class NativeMethods
 
     [DllImport("user32.dll")]
     internal static extern bool UnregisterHotKey(IntPtr hWnd, int id);
+    
+    [DllImport("user32.dll")]
+    internal static extern bool GetClientRect(IntPtr hwnd, ref RECT lpRect);
+    
+    [DllImport("user32.dll")]
+    internal static extern bool ClientToScreen(IntPtr hWnd, ref Point lpPoint);
 
     internal const int WmHotkey = 0x0312;
     internal const uint ModAlt = 0x0001;
     internal const uint ModControl = 0x0002;
     internal const uint ModShift = 0x0004;
     internal const uint ModWin = 0x0008;
+    
+    [StructLayout(LayoutKind.Sequential)]
+    public struct RECT
+    {
+        internal int left;
+        internal int top;
+        internal int right;
+        internal int bottom;
+    }
 }
